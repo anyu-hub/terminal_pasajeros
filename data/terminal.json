@@ -1,0 +1,68 @@
+{
+  "nombre": "Terminal Principal",
+  "ciudad_origen": "Punto Fijo",
+  "rutas": [
+    {
+      "origen": "Punto Fijo",
+      "destino": "Coro",
+      "tarifas_por_tipo": {
+        "estandar": 5.0,
+        "ejecutivo": 8.0,
+        "taxi": 15.0
+      },
+      "recargos_por_tipo": {
+        "estandar": 0.1,
+        "ejecutivo": 0.1,
+        "taxi": 1.0
+      },
+      "vehiculos": [
+        {
+          "tipo": "taxi",
+          "identificador": "AFTY9",
+          "capacidad": 4,
+          "tarifa_base": 0.0,
+          "tasa_entrada": 0.0,
+          "tasa_salida": 0.0,
+          "asientos_ocupados": 1,
+          "disponible": true,
+          "recargo_servicio": 10.0
+        },
+        {
+          "tipo": "autobus_estandar",
+          "identificador": "a4d54da",
+          "capacidad": 32,
+          "tarifa_base": 0.0,
+          "tasa_entrada": 0.0,
+          "tasa_salida": 0.0,
+          "asientos_ocupados": 1,
+          "disponible": true
+        },
+        {
+          "tipo": "autobus_ejecutivo",
+          "identificador": "hada236",
+          "capacidad": 36,
+          "tarifa_base": 0.0,
+          "tasa_entrada": 0.0,
+          "tasa_salida": 0.0,
+          "asientos_ocupados": 1,
+          "disponible": true,
+          "servicios_vip": [
+            "wifi"
+          ],
+          "recargo_vip": 25.0
+        },
+        {
+          "tipo": "taxi",
+          "identificador": "ydtyus6",
+          "capacidad": 4,
+          "tarifa_base": 0.0,
+          "tasa_entrada": 0.0,
+          "tasa_salida": 0.0,
+          "asientos_ocupados": 3,
+          "disponible": true,
+          "recargo_servicio": 10.0
+        }
+      ]
+    }
+  ]
+}
