@@ -58,10 +58,18 @@ def terminal_a_dict(terminal: Terminal) -> dict[str, Any]:
             {
                 "origen": ruta.origen,
                 "destino": ruta.destino,
-                "tarifas_por_tipo": ruta.tarifas_por_tipo,
-                "recargos_por_tipo": ruta.recargos_por_tipo,
-                "turnos_por_tipo": ruta.flota.turnos_por_tipo,
-                "vehiculos": [vehiculo.to_dict() for vehiculo in ruta.flota.vehiculos],
+                "flotas": [
+                    {
+                        "nombre": flota.nombre,
+                        "turnos_por_tipo": flota.turnos_por_tipo,
+                        "tarifas_por_tipo": flota.tarifas_por_tipo,
+                        "recargos_por_tipo": flota.recargos_por_tipo,
+                        "vehiculos": [
+                            vehiculo.to_dict() for vehiculo in flota.vehiculos
+                        ],
+                    }
+                    for flota in ruta.flotas
+                ],
             }
             for ruta in terminal.rutas
         ],
@@ -78,15 +86,36 @@ def terminal_desde_dict(data: dict[str, Any]) -> Terminal:
         ciudad_origen = rutas_data[0].get("origen")
     terminal = Terminal(data["nombre"], ciudad_origen=ciudad_origen)
     for ruta_data in rutas_data:
+        flotas_data = ruta_data.get("flotas")
+        if flotas_data is None:
+            flotas_data = [
+                {
+                    "nombre": "Asociación migrada",
+                    "turnos_por_tipo": ruta_data.get("turnos_por_tipo", {}),
+                    "vehiculos": ruta_data.get("vehiculos", []),
+                }
+            ]
+        flotas = []
+        tarifas_legacy = ruta_data.get("tarifas_por_tipo", {})
+        recargos_legacy = ruta_data.get("recargos_por_tipo", {})
+        for indice, flota_data in enumerate(flotas_data):
+            flota = Flota(nombre=flota_data.get("nombre", "Principal"))
+            flota.turnos_por_tipo.update(flota_data.get("turnos_por_tipo", {}))
+            tarifas = flota_data.get("tarifas_por_tipo", {})
+            recargos = flota_data.get("recargos_por_tipo", {})
+            if not tarifas and indice == 0:
+                tarifas = tarifas_legacy
+                recargos = recargos_legacy
+            flota.tarifas_por_tipo.update(tarifas)
+            flota.recargos_por_tipo.update(recargos)
+            for vehiculo_data in flota_data.get("vehiculos", []):
+                flota.agregar_vehiculo(_vehiculo_desde_dict(vehiculo_data))
+            flotas.append(flota)
         ruta = Ruta(
             ruta_data["origen"],
             ruta_data["destino"],
-            tarifas_por_tipo=ruta_data.get("tarifas_por_tipo", {}),
-            recargos_por_tipo=ruta_data.get("recargos_por_tipo", {}),
+            flotas=flotas,
         )
-        ruta.flota.turnos_por_tipo.update(ruta_data.get("turnos_por_tipo", {}))
-        for vehiculo_data in ruta_data.get("vehiculos", []):
-            ruta.flota.agregar_vehiculo(_vehiculo_desde_dict(vehiculo_data))
         terminal.agregar_ruta(ruta)
     return terminal
 

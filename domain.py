@@ -192,6 +192,14 @@ class Taxi(VehiculoTransporte):
 class Flota:
     vehiculos: list[VehiculoTransporte] = field(default_factory=list)
     turnos_por_tipo: dict[str, str] = field(default_factory=dict)
+    nombre: str = "Principal"
+    tarifas_por_tipo: dict[str, float] = field(default_factory=dict)
+    recargos_por_tipo: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.nombre = self.nombre.strip()
+        if not self.nombre:
+            raise ValueError("El nombre de la flota no puede estar vacío")
 
     def agregar_vehiculo(self, vehiculo: VehiculoTransporte) -> None:
         if not isinstance(vehiculo, VehiculoTransporte):
@@ -230,6 +238,15 @@ class Flota:
 
     def abordar(self, identificador: str, cantidad: int) -> None:
         self.buscar_vehiculo(identificador).abordar(cantidad)
+
+    def tiene_vehiculos_disponibles(self, tipo: str) -> bool:
+        tipo_normalizado = tipo.strip().lower()
+        if tipo_normalizado not in {"estandar", "ejecutivo", "taxi"}:
+            raise ValueError("El tipo de vehículo no es válido")
+        return any(
+            vehiculo.tipo_servicio == tipo_normalizado and vehiculo.disponible
+            for vehiculo in self.vehiculos
+        )
 
     def registrar_salida(self, identificador: str) -> None:
         vehiculo = self.buscar_vehiculo(identificador)
@@ -291,25 +308,6 @@ class Flota:
             for vehiculo in self.vehiculos
         }
 
-
-@dataclass
-class Ruta:
-    origen: str
-    destino: str
-    flota: Flota = field(default_factory=Flota)
-    tarifas_por_tipo: dict[str, float] = field(default_factory=dict)
-    recargos_por_tipo: dict[str, float] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        self.origen = self.origen.strip()
-        self.destino = self.destino.strip()
-        if not self.origen or not self.destino:
-            raise ValueError("El origen y el destino son obligatorios")
-
-    @property
-    def nombre(self) -> str:
-        return f"{self.origen} -> {self.destino}"
-
     def establecer_tarifa(self, tipo: str, tarifa: float, recargo: float = 0.0) -> None:
         tipo_normalizado = tipo.strip().lower()
         if tipo_normalizado not in {"estandar", "ejecutivo", "taxi"}:
@@ -333,9 +331,10 @@ class Ruta:
             )
         self._guardar_tarifas_completas(tarifas)
 
+
     def modificar_tarifas(self, tarifas: dict[str, tuple[float, float]]) -> None:
         if not self.tarifas_configuradas:
-            raise ValueError("Configure primero las tarifas de la ruta")
+            raise ValueError("Configure primero las tarifas de la flota")
         self._guardar_tarifas_completas(tarifas)
 
     def _guardar_tarifas_completas(
@@ -357,6 +356,77 @@ class Ruta:
             raise KeyError(
                 f"No hay una tarifa configurada para el tipo '{tipo_normalizado}'"
             ) from error
+
+
+@dataclass
+class Ruta:
+    origen: str
+    destino: str
+    flotas: list[Flota] = field(default_factory=list)
+    tarifas_por_tipo: dict[str, float] = field(default_factory=dict)
+    recargos_por_tipo: dict[str, float] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        self.origen = self.origen.strip()
+        self.destino = self.destino.strip()
+        if not self.origen or not self.destino:
+            raise ValueError("El origen y el destino son obligatorios")
+        if isinstance(self.flotas, Flota):
+            self.flotas = [self.flotas]
+        nombres = [flota.nombre.lower() for flota in self.flotas]
+        if len(nombres) != len(set(nombres)):
+            raise ValueError("No puede haber flotas con el mismo nombre en una ruta")
+
+    @property
+    def flota(self) -> Flota:
+        """Compatibilidad con la primera flota asociada a la ruta."""
+        if not self.flotas:
+            raise ValueError("La ruta no tiene flotas asociadas")
+        return self.flotas[0]
+
+    def agregar_flota(self, flota: Flota) -> None:
+        if not isinstance(flota, Flota):
+            raise TypeError("La ruta solo admite flotas")
+        if any(item.nombre.lower() == flota.nombre.lower() for item in self.flotas):
+            raise ValueError("Ya existe una flota con ese nombre en la ruta")
+        self.flotas.append(flota)
+
+    def buscar_flota(self, nombre: str) -> Flota:
+        nombre_normalizado = nombre.strip().lower()
+        for flota in self.flotas:
+            if flota.nombre.lower() == nombre_normalizado:
+                return flota
+        raise KeyError(f"No existe la flota '{nombre}' en la ruta")
+
+    def eliminar_flota(self, nombre: str) -> Flota:
+        flota = self.buscar_flota(nombre)
+        self.flotas.remove(flota)
+        return flota
+
+    @property
+    def nombre(self) -> str:
+        return f"{self.origen} -> {self.destino}"
+
+    def establecer_tarifa(self, tipo: str, tarifa: float, recargo: float = 0.0) -> None:
+        self.flota.establecer_tarifa(tipo, tarifa, recargo)
+
+    @property
+    def tarifas_configuradas(self) -> bool:
+        return self.flota.tarifas_configuradas
+
+    def configurar_tarifas(self, tarifas: dict[str, tuple[float, float]]) -> None:
+        self.flota.configurar_tarifas(tarifas)
+
+    def modificar_tarifas(self, tarifas: dict[str, tuple[float, float]]) -> None:
+        self.flota.modificar_tarifas(tarifas)
+
+    def _guardar_tarifas_completas(
+        self, tarifas: dict[str, tuple[float, float]]
+    ) -> None:
+        self.flota._guardar_tarifas_completas(tarifas)
+
+    def calcular_tarifa(self, tipo: str, aplicar_recargo: bool = True) -> float:
+        return self.flota.calcular_tarifa(tipo, aplicar_recargo)
 
 
 @dataclass

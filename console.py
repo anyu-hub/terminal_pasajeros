@@ -6,6 +6,7 @@ from domain import (
     AutobusEjecutivo,
     AutobusEstandar,
     ErrorDominio,
+    Flota,
     Ruta,
     Taxi,
     Terminal,
@@ -29,25 +30,29 @@ class AplicacionConsola:
                 if opcion == "1":
                     self._crear_ruta()
                 elif opcion == "2":
-                    self._listar_rutas()
+                    self._crear_flota()
                 elif opcion == "3":
                     self._agregar_vehiculo()
                 elif opcion == "4":
-                    self._abordar_pasajeros()
-                elif opcion == "5":
-                    self._mostrar_costos()
-                elif opcion == "6":
                     self._configurar_tarifa()
-                elif opcion == "7":
-                    self._eliminar_ruta()
-                elif opcion == "8":
-                    self._eliminar_vehiculo()
-                elif opcion == "9":
+                elif opcion == "5":
                     self._modificar_tarifas()
+                elif opcion == "6":
+                    self._listar_rutas()
+                elif opcion == "7":
+                    self._mostrar_costos()
+                elif opcion == "8":
+                    self._abordar_pasajeros()
+                elif opcion == "9":
+                    self._eliminar_ruta()
                 elif opcion == "10":
-                    self._reingresar_vehiculo()
+                    self._eliminar_vehiculo()
                 elif opcion == "11":
                     self._registrar_salida()
+                elif opcion == "12":
+                    self._reingresar_vehiculo()
+                elif opcion == "13":
+                    self._eliminar_flota()
                 elif opcion == "0":
                     guardar_terminal(self.terminal, self.archivo_datos)
                     print("Datos guardados. Hasta pronto.")
@@ -61,16 +66,18 @@ class AplicacionConsola:
     def _mostrar_menu() -> None:
         print(
             "\n1. Crear ruta\n"
-            "2. Listar rutas y vehículos\n"
+            "2. Crear flota para una ruta\n"
             "3. Agregar vehículo a una ruta\n"
-            "4. Abordar pasajeros\n"
-            "5. Consultar tarifas por ruta\n"
-            "6. Configurar tarifas y recargos de la ruta\n"
-            "7. Eliminar ruta\n"
-            "8. Eliminar vehículo\n"
-            "9. Modificar tarifas y recargos de la ruta\n"
-            "10. Reingresar vehículo disponible\n"
+            "4. Configurar tarifas y recargos de la flota\n"
+            "5. Modificar tarifas y recargos de la flota\n"
+            "6. Listar rutas y vehículos\n"
+            "7. Consultar tarifas por ruta\n"
+            "8. Abordar pasajeros\n"
+            "9. Eliminar ruta\n"
+            "10. Eliminar vehículo\n"
             "11. Registrar salida de vehículo\n"
+            "12. Reingresar vehículo disponible\n"
+            "13. Eliminar flota de una ruta\n"
             "0. Salir"
         )
 
@@ -82,6 +89,25 @@ class AplicacionConsola:
             except KeyError as error:
                 self._anunciar_error(str(error))
                 print("Ingrese nuevamente un destino válido.")
+
+    def _seleccionar_flota(self, ruta: Ruta) -> Flota:
+        if not ruta.flotas:
+            raise ValueError(
+                f"La ruta {ruta.nombre} no tiene flotas asociadas. "
+                "Use primero la opción 2 para crear una flota."
+            )
+        if len(ruta.flotas) == 1:
+            return ruta.flota
+        print(f"Flotas disponibles para {ruta.nombre}:")
+        for flota in ruta.flotas:
+            print(f"- {flota.nombre}")
+        while True:
+            nombre = self._leer_texto("Nombre de la flota: ")
+            try:
+                return ruta.buscar_flota(nombre)
+            except KeyError as error:
+                self._anunciar_error(str(error))
+                print("Ingrese nuevamente un nombre de flota válido.")
 
     def _crear_ruta(self) -> None:
         while True:
@@ -99,6 +125,26 @@ class AplicacionConsola:
         guardar_terminal(self.terminal, self.archivo_datos)
         print("Ruta creada y guardada.")
 
+    def _crear_flota(self) -> None:
+        ruta = self._seleccionar_ruta()
+        nombre = self._leer_texto("Nombre de la nueva flota: ")
+        ruta.agregar_flota(Flota(nombre=nombre))
+        guardar_terminal(self.terminal, self.archivo_datos)
+        print(f"Flota {nombre} creada y guardada para la ruta {ruta.nombre}.")
+
+    def _eliminar_flota(self) -> None:
+        ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
+        confirmacion = self._leer_confirmacion(
+            f"¿Eliminar la flota {flota.nombre} de la ruta {ruta.nombre}? (SI/NO): "
+        )
+        if not confirmacion:
+            print("Eliminación cancelada.")
+            return
+        ruta.eliminar_flota(flota.nombre)
+        guardar_terminal(self.terminal, self.archivo_datos)
+        print(f"Flota {flota.nombre} eliminada y datos guardados.")
+
     def _eliminar_ruta(self) -> None:
         ruta = self._seleccionar_ruta()
         confirmacion = self._leer_texto(
@@ -113,22 +159,24 @@ class AplicacionConsola:
 
     def _eliminar_vehiculo(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         identificador = self._leer_texto("Identificador del vehículo: ")
-        vehiculo = ruta.flota.buscar_vehiculo(identificador)
+        vehiculo = flota.buscar_vehiculo(identificador)
         confirmacion = self._leer_texto(
             f"Escriba 'SI' para eliminar {vehiculo.identificador}: "
         ).upper()
         if confirmacion != "SI":
             print("Eliminación cancelada.")
             return
-        ruta.flota.eliminar_vehiculo(identificador)
+        flota.eliminar_vehiculo(identificador)
         guardar_terminal(self.terminal, self.archivo_datos)
         print("Vehículo eliminado y datos guardados.")
 
     def _reingresar_vehiculo(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         identificador = self._leer_texto("Identificador del vehículo que regresó: ")
-        vehiculo = ruta.flota.buscar_vehiculo(identificador)
+        vehiculo = flota.buscar_vehiculo(identificador)
         if vehiculo.disponible:
             print("El vehículo ya está disponible.")
             return
@@ -144,8 +192,9 @@ class AplicacionConsola:
 
     def _registrar_salida(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         identificador = self._leer_texto("Identificador del vehículo que salió: ")
-        vehiculo = ruta.flota.buscar_vehiculo(identificador)
+        vehiculo = flota.buscar_vehiculo(identificador)
         if not vehiculo.disponible:
             print("El vehículo ya está registrado fuera de disponibilidad.")
             return
@@ -155,7 +204,7 @@ class AplicacionConsola:
         if not confirmacion:
             print("Salida cancelada.")
             return
-        ruta.flota.registrar_salida(identificador)
+        flota.registrar_salida(identificador)
         guardar_terminal(self.terminal, self.archivo_datos)
         print(f"Vehículo {vehiculo.identificador} salió y quedó fuera de disponibilidad.")
 
@@ -165,25 +214,36 @@ class AplicacionConsola:
             return
         for ruta in self.terminal.rutas:
             print(f"\nRuta: {ruta.nombre}")
-            if ruta.tarifas_por_tipo:
-                print("  Tarifas por tipo:")
-                for tipo, tarifa in ruta.tarifas_por_tipo.items():
-                    recargo = ruta.recargos_por_tipo.get(tipo, 0.0)
-                    print(f"    {tipo}: base ${tarifa:.2f} + recargo ${recargo:.2f} = ${tarifa + recargo:.2f}")
-            else:
-                print("  Sin tarifas configuradas.")
-            if not ruta.flota.vehiculos:
-                print("  Sin vehículos asignados.")
-                continue
-            for vehiculo in ruta.flota.vehiculos:
-                print(
-                    f"  {vehiculo.identificador} | {vehiculo.tipo} | "
-                    f"ocupados: {vehiculo.asientos_ocupados}/{vehiculo.capacidad} | "
-                    f"estado: {'disponible' if vehiculo.disponible else 'en viaje'}"
-                )
+            print(f"  Flotas asociadas ({len(ruta.flotas)}):")
+            for flota in ruta.flotas:
+                print(f"    Flota: {flota.nombre}")
+                if flota.tarifas_por_tipo:
+                    print("      Tarifas de la flota:")
+                    for tipo, tarifa in flota.tarifas_por_tipo.items():
+                        recargo = flota.recargos_por_tipo.get(tipo, 0.0)
+                        print(
+                            f"        {tipo}: base ${tarifa:.2f} + "
+                            f"recargo ${recargo:.2f} = ${tarifa + recargo:.2f}"
+                        )
+                else:
+                    print("      Sin tarifas configuradas.")
+                if not flota.vehiculos:
+                    print("      Sin vehículos asignados.")
+                    continue
+                for vehiculo in flota.vehiculos:
+                    tarifa = "no configurada"
+                    if vehiculo.tipo_servicio in flota.tarifas_por_tipo:
+                        tarifa = f"${flota.calcular_tarifa(vehiculo.tipo_servicio):.2f}"
+                    print(
+                        f"      {vehiculo.identificador} | {vehiculo.tipo} | "
+                        f"ocupados: {vehiculo.asientos_ocupados}/{vehiculo.capacidad} | "
+                        f"precio: {tarifa} | "
+                        f"estado: {'disponible' if vehiculo.disponible else 'en viaje'}"
+                    )
 
     def _agregar_vehiculo(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         identificador = self._leer_texto("Identificador del vehículo: ")
         tipo = self._leer_tipo_vehiculo()
         if tipo == "estandar":
@@ -203,7 +263,7 @@ class AplicacionConsola:
             vehiculo = Taxi(identificador, 0.0)
         while True:
             try:
-                ruta.flota.agregar_vehiculo(vehiculo)
+                flota.agregar_vehiculo(vehiculo)
                 break
             except (TypeError, ValueError) as error:
                 self._anunciar_error(str(error))
@@ -216,10 +276,17 @@ class AplicacionConsola:
 
     def _abordar_pasajeros(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         while True:
             try:
                 tipo = self._leer_tipo_vehiculo()
                 print(f"Servicio seleccionado: {tipo}")
+                if not flota.tiene_vehiculos_disponibles(tipo):
+                    print(
+                        f"La flota {flota.nombre} no tiene vehículos disponibles "
+                        f"del tipo {tipo}. El abordaje se canceló."
+                    )
+                    return
                 if not self._leer_confirmacion("¿Desea abordar este servicio? (SI/NO): "):
                     print("Abordaje cancelado.")
                     return
@@ -231,8 +298,8 @@ class AplicacionConsola:
                         "¿Tiene 60 años o más? (SI/NO): "
                     )
                 aplica_recargo = not (es_estudiante or es_mayor_de_60)
-                tarifa = ruta.calcular_tarifa(tipo, aplicar_recargo=aplica_recargo)
-                vehiculo = ruta.flota.abordar_por_tipo(tipo, cantidad)
+                tarifa = flota.calcular_tarifa(tipo, aplicar_recargo=aplica_recargo)
+                vehiculo = flota.abordar_por_tipo(tipo, cantidad)
                 break
             except (ErrorDominio, KeyError, ValueError) as error:
                 self._anunciar_error(str(error))
@@ -240,6 +307,7 @@ class AplicacionConsola:
         guardar_terminal(self.terminal, self.archivo_datos)
         print("\n=== FACTURA DE ABORDAJE ===")
         print(f"Ruta: {ruta.nombre}")
+        print(f"Flota: {flota.nombre}")
         print(f"Servicio: {tipo}")
         print(f"Pasajeros: {cantidad}")
         print(f"Vehículo/placa asignado: {vehiculo.identificador}")
@@ -249,15 +317,18 @@ class AplicacionConsola:
 
     def _mostrar_costos(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         tipos = ("estandar", "ejecutivo", "taxi")
-        if not ruta.tarifas_configuradas:
-            self._anunciar_error("la ruta no tiene configuradas las tarifas de todos los tipos")
-            print("Configure las tarifas de la ruta antes de consultarlas.")
+        if not flota.tarifas_configuradas:
+            self._anunciar_error(
+                f"la flota '{flota.nombre}' no tiene configuradas las tarifas de todos los tipos"
+            )
+            print("Configure las tarifas de la flota antes de consultarlas.")
             return
-        print(f"\n=== TARIFAS DE LA RUTA {ruta.nombre} ===")
+        print(f"\n=== TARIFAS DE {flota.nombre} EN LA RUTA {ruta.nombre} ===")
         for tipo in tipos:
-            base = ruta.tarifas_por_tipo[tipo]
-            recargo = ruta.recargos_por_tipo[tipo]
+            base = flota.tarifas_por_tipo[tipo]
+            recargo = flota.recargos_por_tipo[tipo]
             tarifa = base + recargo
             print(
                 f"{tipo}: base ${base:.2f} + recargo ${recargo:.2f} "
@@ -266,21 +337,23 @@ class AplicacionConsola:
 
     def _configurar_tarifa(self) -> None:
         ruta = self._seleccionar_ruta()
-        if ruta.tarifas_configuradas:
-            self._anunciar_error("las tarifas de esta ruta ya están definidas")
-            print("Use la opción 9 para modificarlas.")
+        flota = self._seleccionar_flota(ruta)
+        if flota.tarifas_configuradas:
+            self._anunciar_error("las tarifas de esta flota ya están definidas")
+            print("Use la opción 5 para modificarlas.")
             return
         tarifas = self._leer_tarifas()
-        ruta.configurar_tarifas(tarifas)
+        flota.configurar_tarifas(tarifas)
         guardar_terminal(self.terminal, self.archivo_datos)
-        print("Tarifas y recargos configurados para toda la ruta y guardados.")
+        print(f"Tarifas y recargos configurados para {flota.nombre} y guardados.")
 
     def _modificar_tarifas(self) -> None:
         ruta = self._seleccionar_ruta()
+        flota = self._seleccionar_flota(ruta)
         tarifas = self._leer_tarifas()
-        ruta.modificar_tarifas(tarifas)
+        flota.modificar_tarifas(tarifas)
         guardar_terminal(self.terminal, self.archivo_datos)
-        print("Tarifas y recargos modificados y guardados.")
+        print(f"Tarifas y recargos de {flota.nombre} modificados y guardados.")
 
     def _leer_tarifas(self) -> dict[str, tuple[float, float]]:
         tarifas = {}
@@ -308,9 +381,9 @@ class AplicacionConsola:
     def _leer_opcion() -> str:
         while True:
             opcion = input("Seleccione una opción: ").strip()
-            if opcion in {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11"}:
+            if opcion in {"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"}:
                 return opcion
-            AplicacionConsola._anunciar_error("la opción debe estar entre 0 y 11")
+            AplicacionConsola._anunciar_error("la opción debe estar entre 0 y 13")
 
     @staticmethod
     def _leer_tipo_vehiculo() -> str:

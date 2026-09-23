@@ -176,6 +176,7 @@ class VehiculoTestCase(unittest.TestCase):
 
     def test_ruta_maneja_tarifas_por_tipo_independientes_del_vehiculo(self):
         ruta = Ruta("Caracas", "Valencia")
+        ruta.agregar_flota(Flota(nombre="Asociación Norte"))
         ruta.establecer_tarifa(" estandar ", 80)
         ruta.establecer_tarifa("ejecutivo", 120, 15)
         ruta.establecer_tarifa("taxi", 45, 5)
@@ -186,6 +187,7 @@ class VehiculoTestCase(unittest.TestCase):
 
     def test_recargo_se_aplica_o_exonera_segun_condicion_del_pasajero(self):
         ruta = Ruta("Caracas", "Valencia")
+        ruta.agregar_flota(Flota(nombre="Asociación Norte"))
         ruta.establecer_tarifa("estandar", 80, 15)
 
         self.assertEqual(ruta.calcular_tarifa("estandar"), 95.0)
@@ -194,6 +196,7 @@ class VehiculoTestCase(unittest.TestCase):
 
     def test_tarifas_solo_se_modifican_con_operacion_autorizada(self):
         ruta = Ruta("Caracas", "Valencia")
+        ruta.agregar_flota(Flota(nombre="Asociación Norte"))
         tarifas_iniciales = {
             "estandar": (80, 5),
             "ejecutivo": (120, 15),
@@ -212,6 +215,48 @@ class VehiculoTestCase(unittest.TestCase):
         self.assertEqual(ruta.calcular_tarifa("estandar"), 85.0)
         ruta.modificar_tarifas(tarifas_nuevas)
         self.assertEqual(ruta.calcular_tarifa("estandar"), 96.0)
+
+    def test_ruta_admite_varias_flotas_independientes(self):
+        ruta = Ruta("Caracas", "Valencia")
+        principal = Flota(nombre="Asociación Principal")
+        secundaria = Flota(nombre="Asociación Ejecutiva")
+        ruta.agregar_flota(principal)
+        ruta.agregar_flota(secundaria)
+
+        principal.agregar_vehiculo(Taxi("TAXI-PRINCIPAL", 50))
+        secundaria.agregar_vehiculo(Taxi("TAXI-ASOCIADO", 50))
+
+        self.assertEqual([flota.nombre for flota in ruta.flotas], [
+            "Asociación Principal",
+            "Asociación Ejecutiva",
+        ])
+        self.assertIs(ruta.buscar_flota("asociación ejecutiva"), secundaria)
+        self.assertEqual(principal.vehiculos[0].identificador, "TAXI-PRINCIPAL")
+        self.assertEqual(secundaria.vehiculos[0].identificador, "TAXI-ASOCIADO")
+
+    def test_flotas_de_una_misma_ruta_pueden_tener_tarifas_distintas(self):
+        ruta = Ruta("Caracas", "Valencia")
+        primera = Flota(nombre="Asociación Norte")
+        segunda = Flota(nombre="Asociación Sur")
+        ruta.agregar_flota(primera)
+        ruta.agregar_flota(segunda)
+        primera.configurar_tarifas(
+            {
+                "estandar": (80, 5),
+                "ejecutivo": (120, 15),
+                "taxi": (45, 5),
+            }
+        )
+        segunda.configurar_tarifas(
+            {
+                "estandar": (100, 10),
+                "ejecutivo": (150, 20),
+                "taxi": (60, 8),
+            }
+        )
+
+        self.assertEqual(primera.calcular_tarifa("taxi"), 50.0)
+        self.assertEqual(segunda.calcular_tarifa("taxi"), 68.0)
 
     def test_no_se_puede_modificar_una_ruta_sin_configuracion_inicial(self):
         ruta = Ruta("Caracas", "Valencia")
@@ -235,7 +280,9 @@ class VehiculoTestCase(unittest.TestCase):
     def test_flota_y_terminal_pueden_eliminar_elementos(self):
         terminal = Terminal("Terminal Norte")
         ruta = Ruta("Caracas", "Valencia")
-        ruta.flota.agregar_vehiculo(Taxi("TAXI-1", 50))
+        flota = Flota(nombre="Asociación Norte")
+        ruta.agregar_flota(flota)
+        flota.agregar_vehiculo(Taxi("TAXI-1", 50))
         terminal.agregar_ruta(ruta)
 
         eliminado = ruta.flota.eliminar_vehiculo("TAXI-1")
@@ -245,6 +292,16 @@ class VehiculoTestCase(unittest.TestCase):
         self.assertEqual(ruta_eliminada.destino, "Valencia")
         self.assertEqual(terminal.rutas, [])
 
+    def test_ruta_puede_eliminar_una_flota_sin_afectar_las_demas(self):
+        ruta = Ruta("Caracas", "Valencia")
+        ruta.agregar_flota(Flota(nombre="Asociación Norte"))
+        ruta.agregar_flota(Flota(nombre="Asociación Sur"))
+
+        eliminada = ruta.eliminar_flota("asociación norte")
+
+        self.assertEqual(eliminada.nombre, "Asociación Norte")
+        self.assertEqual([flota.nombre for flota in ruta.flotas], ["Asociación Sur"])
+
 
 class PersistenciaTestCase(unittest.TestCase):
     def test_guarda_y_carga_terminal_con_ocupacion_y_servicios(self):
@@ -252,6 +309,7 @@ class PersistenciaTestCase(unittest.TestCase):
             archivo = Path(directorio) / "terminal.json"
             terminal = Terminal("Terminal Norte")
             ruta = Ruta("Caracas", "Valencia")
+            ruta.agregar_flota(Flota(nombre="Asociación Norte"))
             ruta.establecer_tarifa("ejecutivo", 200, 30)
             ejecutivo = AutobusEjecutivo(
                 "EJ-1", 30, 150, ["Wi-Fi", "Catering"], 30, 4, 6
@@ -270,13 +328,17 @@ class PersistenciaTestCase(unittest.TestCase):
             self.assertEqual(vehiculo.asientos_ocupados, 8)
             self.assertEqual(vehiculo.servicios_vip, ["Wi-Fi", "Catering"])
             self.assertEqual(restaurado.rutas[0].calcular_tarifa("ejecutivo"), 230.0)
-            self.assertEqual(restaurado.rutas[0].recargos_por_tipo["ejecutivo"], 30.0)
+            self.assertEqual(
+                restaurado.rutas[0].flota.recargos_por_tipo["ejecutivo"],
+                30.0,
+            )
 
     def test_persistencia_conserva_vehiculo_fuera_de_disponibilidad(self):
         with tempfile.TemporaryDirectory() as directorio:
             archivo = Path(directorio) / "terminal.json"
             terminal = Terminal("Terminal Norte")
             ruta = Ruta("Caracas", "Valencia")
+            ruta.agregar_flota(Flota(nombre="Asociación Norte"))
             taxi = Taxi("TAXI-5", 50)
             taxi.registrar_salida()
             ruta.flota.agregar_vehiculo(taxi)
@@ -286,6 +348,61 @@ class PersistenciaTestCase(unittest.TestCase):
             restaurado = cargar_terminal(archivo)
 
             self.assertFalse(restaurado.rutas[0].flota.vehiculos[0].disponible)
+
+    def test_persistencia_conserva_varias_flotas_por_ruta(self):
+        with tempfile.TemporaryDirectory() as directorio:
+            archivo = Path(directorio) / "terminal.json"
+            terminal = Terminal("Terminal Norte")
+            ruta = Ruta("Caracas", "Valencia")
+            ruta.agregar_flota(Flota(nombre="Asociación Ejecutiva"))
+            ruta.agregar_flota(Flota(nombre="Asociación Principal"))
+            ruta.flotas[0].agregar_vehiculo(Taxi("TAXI-PRINCIPAL", 50))
+            ruta.flotas[1].agregar_vehiculo(Taxi("TAXI-ASOCIADO", 50))
+            terminal.agregar_ruta(ruta)
+
+            guardar_terminal(terminal, archivo)
+            restaurada = cargar_terminal(archivo).rutas[0]
+
+            self.assertEqual(
+                [flota.nombre for flota in restaurada.flotas],
+                ["Asociación Ejecutiva", "Asociación Principal"],
+            )
+            self.assertEqual(
+                [
+                    flota.vehiculos[0].identificador
+                    for flota in restaurada.flotas
+                ],
+                ["TAXI-PRINCIPAL", "TAXI-ASOCIADO"],
+            )
+
+    def test_persistencia_conserva_tarifas_independientes_por_flota(self):
+        with tempfile.TemporaryDirectory() as directorio:
+            archivo = Path(directorio) / "terminal.json"
+            terminal = Terminal("Terminal Norte")
+            ruta = Ruta("Caracas", "Valencia")
+            ruta.agregar_flota(Flota(nombre="Asociación Principal"))
+            ruta.flota.configurar_tarifas(
+                {
+                    "estandar": (80, 5),
+                    "ejecutivo": (120, 15),
+                    "taxi": (45, 5),
+                }
+            )
+            ruta.agregar_flota(Flota(nombre="Asociación Sur"))
+            ruta.flotas[1].configurar_tarifas(
+                {
+                    "estandar": (100, 10),
+                    "ejecutivo": (150, 20),
+                    "taxi": (60, 8),
+                }
+            )
+            terminal.agregar_ruta(ruta)
+
+            guardar_terminal(terminal, archivo)
+            restaurada = cargar_terminal(archivo).rutas[0]
+
+            self.assertEqual(restaurada.flotas[0].calcular_tarifa("taxi"), 50.0)
+            self.assertEqual(restaurada.flotas[1].calcular_tarifa("taxi"), 68.0)
 
     def test_archivo_inexistente_crea_terminal_vacio(self):
         with tempfile.TemporaryDirectory() as directorio:
@@ -301,6 +418,127 @@ class PersistenciaTestCase(unittest.TestCase):
 
 
 class EntradaConsolaTestCase(unittest.TestCase):
+    def test_abordaje_sin_tipo_disponible_regresa_al_menu_sin_factura(self):
+        aplicacion = AplicacionConsola.__new__(AplicacionConsola)
+        aplicacion.terminal = Terminal("Terminal Norte", ciudad_origen="Caracas")
+        ruta = Ruta("Caracas", "Valencia")
+        flota = Flota(nombre="Asociación Norte")
+        taxi = Taxi("TAXI-1", 0.0)
+        taxi.registrar_salida()
+        flota.agregar_vehiculo(taxi)
+        ruta.agregar_flota(flota)
+        aplicacion.terminal.agregar_ruta(ruta)
+
+        with patch("builtins.input", side_effect=["Valencia", "taxi"]), patch(
+            "builtins.print"
+        ) as imprimir:
+            aplicacion._abordar_pasajeros()
+
+        salida = "\n".join(
+            str(llamada.args[0])
+            for llamada in imprimir.call_args_list
+        )
+        self.assertIn("no tiene vehículos disponibles", salida)
+        self.assertIn("El abordaje se canceló", salida)
+        self.assertNotIn("FACTURA DE ABORDAJE", salida)
+
+    def test_eliminar_flota_solicita_ruta_flota_y_confirmacion(self):
+        aplicacion = AplicacionConsola.__new__(AplicacionConsola)
+        aplicacion.terminal = Terminal("Terminal Norte", ciudad_origen="Caracas")
+        ruta = Ruta("Caracas", "Valencia")
+        ruta.agregar_flota(Flota(nombre="Asociación Norte"))
+        aplicacion.terminal.agregar_ruta(ruta)
+        aplicacion.archivo_datos = Path("terminal-prueba.json")
+
+        with patch(
+            "builtins.input",
+            side_effect=["Valencia", "SI"],
+        ), patch("console.guardar_terminal"):
+            aplicacion._eliminar_flota()
+
+        self.assertEqual(ruta.flotas, [])
+
+    def test_crear_ruta_no_solicita_nombre_de_flota(self):
+        aplicacion = AplicacionConsola.__new__(AplicacionConsola)
+        aplicacion.terminal = Terminal("Terminal Norte", ciudad_origen="Caracas")
+        aplicacion.archivo_datos = Path("terminal-prueba.json")
+
+        with patch("builtins.input", return_value="Valencia"), patch(
+            "console.guardar_terminal"
+        ):
+            aplicacion._crear_ruta()
+
+        ruta = aplicacion.terminal.buscar_ruta_destino("Valencia")
+        self.assertEqual(ruta.flotas, [])
+
+    def test_crear_flota_solicita_y_asocia_la_ruta_elegida(self):
+        aplicacion = AplicacionConsola.__new__(AplicacionConsola)
+        aplicacion.terminal = Terminal("Terminal Norte", ciudad_origen="Caracas")
+        ruta = Ruta("Caracas", "Valencia")
+        aplicacion.terminal.agregar_ruta(ruta)
+        aplicacion.archivo_datos = Path("terminal-prueba.json")
+
+        with patch(
+            "builtins.input", side_effect=["Valencia", "Asociación Sur"]
+        ), patch("console.guardar_terminal"):
+            aplicacion._crear_flota()
+
+        self.assertIs(ruta.buscar_flota("Asociación Sur"), ruta.flotas[0])
+
+    def test_usuario_puede_elegir_la_flota_de_la_ruta(self):
+        ruta = Ruta("Caracas", "Valencia")
+        asociacion = Flota(nombre="Asociación Sur")
+        ruta.agregar_flota(asociacion)
+        aplicacion = AplicacionConsola.__new__(AplicacionConsola)
+
+        with patch("builtins.input", return_value="Asociación Sur"):
+            seleccionada = aplicacion._seleccionar_flota(ruta)
+
+        self.assertIs(seleccionada, asociacion)
+
+    def test_lista_ruta_por_flota_y_muestra_precio_de_cada_variante(self):
+        terminal = Terminal("Terminal Norte")
+        ruta = Ruta("Caracas", "Valencia")
+        ruta.agregar_flota(Flota(nombre="Asociación Norte"))
+        ruta.flota.configurar_tarifas(
+            {
+                "estandar": (80, 5),
+                "ejecutivo": (120, 15),
+                "taxi": (45, 5),
+            }
+        )
+        ruta.flota.nombre = "Asociación Norte"
+        ruta.flota.agregar_vehiculo(Taxi("TAXI-NORTE", 0.0))
+        ruta.agregar_flota(Flota(nombre="Asociación Sur"))
+        ruta.flotas[1].configurar_tarifas(
+            {
+                "estandar": (100, 10),
+                "ejecutivo": (150, 20),
+                "taxi": (60, 8),
+            }
+        )
+        ruta.flotas[1].agregar_vehiculo(
+            AutobusEstandar("BUS-SUR", 40, 0.0)
+        )
+        terminal.agregar_ruta(ruta)
+        aplicacion = AplicacionConsola.__new__(AplicacionConsola)
+        aplicacion.terminal = terminal
+
+        with patch("builtins.print") as imprimir:
+            aplicacion._listar_rutas()
+
+        salida = "\n".join(
+            str(llamada.args[0])
+            for llamada in imprimir.call_args_list
+        )
+        self.assertIn("Flotas asociadas (2):", salida)
+        self.assertIn("Flota: Asociación Norte", salida)
+        self.assertIn("Flota: Asociación Sur", salida)
+        self.assertIn("TAXI-NORTE", salida)
+        self.assertIn("BUS-SUR", salida)
+        self.assertIn("precio: $50.00", salida)
+        self.assertIn("precio: $110.00", salida)
+
     def test_texto_ingresado_se_normaliza_a_mayusculas(self):
         with patch("builtins.input", return_value="  hada236  "):
             resultado = AplicacionConsola._leer_texto("Identificador: ")
@@ -330,7 +568,7 @@ class EntradaConsolaTestCase(unittest.TestCase):
         )
 
     def test_opcion_repite_hasta_recibir_una_opcion_valida(self):
-        with patch("builtins.input", side_effect=[" 12 ", " 0 "]), patch(
+        with patch("builtins.input", side_effect=[" 14 ", " 0 "]), patch(
             "builtins.print"
         ) as imprimir:
             resultado = AplicacionConsola._leer_opcion()
